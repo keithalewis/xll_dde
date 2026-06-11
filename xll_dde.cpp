@@ -1,5 +1,6 @@
-#include "xll_dde.h"
+#include <cassert>
 #include <iostream>
+#include "xll_dde.h"
 
 using namespace DDE;
 
@@ -14,7 +15,9 @@ int test_dde()
             return Tstring(TEXT("Unknown item"));
         }
     );
-    server.runMessageLoop();
+    auto sh = server.StringHandle(TEXT("MyText"));
+    auto qs = sh.QueryString();
+    assert(qs == TEXT("MyText"));
    
     return 0;
 }

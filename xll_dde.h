@@ -44,13 +44,20 @@ namespace DDE {
 			hData = DdeCreateDataHandle(id, data.data(), (DWORD)data.size_bytes(),
 				0, item, fmt, cmd);
 		}
-
+		DataHandle(const DataHandle&) = delete;
+		DataHandle& operator=(const DataHandle&) = delete;
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddefreedatahandle
 		~DataHandle()
 		{
 			DdeFreeDataHandle(hData);
 		}
+
+		operator HDDEDATA() const
+		{
+			return hData;
+		}
 	};
+
 	class StringHandle {
 		DWORD id;
 		HSZ hsz;
@@ -86,8 +93,8 @@ namespace DDE {
 
 			DWORD nb = DdeQueryString(id, hsz, 0, 0, CP<TCHAR>::codepage);
 			if (nb != 0) {
-				sz.resize(nb);
-				nb = DdeQueryString(id, hsz, sz.data(), nb, CP<TCHAR>::codepage);
+				sz.resize(nb + 1);
+				nb = DdeQueryString(id, hsz, sz.data(), nb + 1, CP<TCHAR>::codepage);
 			}
 
 			return sz;
@@ -97,11 +104,11 @@ namespace DDE {
 	class Server {
 	public:
 		using RequestHandler = std::function<Tstring(const Tstring& item)>;
-		HSZ StringHandle(LPCTSTR string)
+		auto StringHandle(LPCTSTR string)
 		{
 			return DDE::StringHandle(idInst_, string);
 		}
-		HSZ StringHandle(const Tstring string)
+		auto StringHandle(const Tstring string)
 		{
 			return StringHandle(string.c_str());
 		}
@@ -187,15 +194,16 @@ namespace DDE {
 			if (res != DMLERR_NO_ERROR)
 				throw std::runtime_error("DdeInitialize failed");
 
-			hszService_ = StringHandle(service.c_str());
-			hszTopic_ = StringHandle(topic.c_str());
+			//hszTopic_ = StringHandle(topic);
 
-			if (!DdeNameService(idInst_, hszService_, 0, DNS_REGISTER))
+			if (!DdeNameService(idInst_, StringHandle(service), 0, DNS_REGISTER))
 				throw std::runtime_error("DdeNameService failed");
 		}
 
 		~Server() {
-			if (idInst_)     DdeUninitialize(idInst_);
+			if (idInst_) {
+				DdeUninitialize(idInst_);
+			}
 		}
 
 		void runMessageLoop() {
