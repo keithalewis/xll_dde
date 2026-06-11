@@ -13,10 +13,14 @@ namespace DDE {
 	using Data = std::span<BYTE>;
 
 	// Clipboard format traits
-	template<typename T> struct CF { UINT value; };
 	// TODO: X-macro
-	template<> struct CF<CHAR> { UINT value = CF_TEXT; };
-	template<> struct CF<WCHAR> { UINT value = CF_UNICODETEXT; };
+	template<typename T> struct CF { static const UINT text; };
+	template<> struct CF<CHAR> { static const UINT text = CF_TEXT; };
+	template<> struct CF<WCHAR> { static const UINT text = CF_UNICODETEXT; };
+
+	template<typename T> struct CP { static const UINT codepage; };
+	template<> struct CP<CHAR> { static const UINT codepage = CP_WINANSI; };
+	template<> struct CP<WCHAR> { static const UINT codepage = CP_WINUNICODE; };
 
 	// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddeaccessdata
 	inline Data AccessData(HDDEDATA hData)
@@ -33,9 +37,8 @@ namespace DDE {
 		HDDEDATA hData;
 	public:
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddecreatedatahandle
-		template<typename T = TCHAR>
 		DataHandle(DWORD id, Data data, HSZ item = NULL, 
-			UINT fmt = CF<T>::value, UINT cmd = HDATA_APPOWNED)
+			UINT fmt = CF<TCHAR>::text, UINT cmd = HDATA_APPOWNED)
 			: id(id)
 		{
 			hData = DdeCreateDataHandle(id, data.data(), (DWORD)data.size_bytes(),
@@ -53,10 +56,10 @@ namespace DDE {
 		HSZ hsz;
 	public:
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddecreatestringhandlea?redirectedfrom=MSDN&devlangs=cpp&f1url=%3FappId%3DDev18IDEF1%26l%3DEN-US%26k%3Dk%28DDEML%2FDdeCreateStringHandle%29%3Bk%28DdeCreateStringHandle%29%3Bk%28DevLang-C%2B%2B%29%3Bk%28TargetOS-Windows%29%26rd%3Dtrue
-		StringHandle(DWORD id, LPCTSTR string, int cp = CP_WINNEUTRAL)
+		StringHandle(DWORD id, LPCTSTR string)
 			: id(id)
 		{
-			hsz = DdeCreateStringHandle(id, string, cp);
+			hsz = DdeCreateStringHandle(id, string, CP<TCHAR>::codepage);
 		}
 		StringHandle(const StringHandle&) = delete;
 		StringHandle& operator=(const StringHandle&) = delete;
@@ -81,10 +84,10 @@ namespace DDE {
 		{
 			Tstring sz;
 
-			DWORD nb = DdeQueryString(id, hsz, 0, 0, CP_WINNEUTRAL);
+			DWORD nb = DdeQueryString(id, hsz, 0, 0, CP<TCHAR>::codepage);
 			if (nb != 0) {
 				sz.resize(nb);
-				nb = DdeQueryString(id, hsz, sz.data(), nb, CP_WINNEUTRAL);
+				nb = DdeQueryString(id, hsz, sz.data(), nb, CP<TCHAR>::codepage);
 			}
 
 			return sz;
@@ -94,9 +97,13 @@ namespace DDE {
 	class Server {
 	public:
 		using RequestHandler = std::function<Tstring(const Tstring& item)>;
-		HSZ StringHandle(LPCTSTR string, int cp = CP_WINNEUTRAL)
+		HSZ StringHandle(LPCTSTR string)
 		{
-			return DDE::StringHandle(idInst_, string, cp);
+			return DDE::StringHandle(idInst_, string);
+		}
+		HSZ StringHandle(const Tstring string)
+		{
+			return StringHandle(string.c_str());
 		}
 	private:
 		DWORD idInst_ = 0;
@@ -142,7 +149,7 @@ namespace DDE {
 				if (uFmt == CF_TEXT && self->onRequest_) {
 					TCHAR itemBuf[256];
 					DdeQueryString(self->idInst_, hsz2,
-						itemBuf, sizeof(itemBuf), CP_WINANSI);
+						itemBuf, sizeof(itemBuf), CP<TCHAR>::codepage);
 
 					Tstring item(itemBuf);
 					Tstring value = self->onRequest_(item);
@@ -153,7 +160,7 @@ namespace DDE {
 						static_cast<DWORD>(value.size() + 1),
 						0,
 						hsz2,
-						CF_TEXT,
+						CF<TCHAR>::text,
 						0
 					);
 				}
@@ -164,8 +171,8 @@ namespace DDE {
 		}
 
 	public:
-		Server(const std::basic_string<TCHAR>& service,
-			const std::basic_string<TCHAR>& topic,
+		Server(const Tstring& service,
+			const Tstring& topic,
 			RequestHandler handler,
 			DWORD cmd = APPCLASS_STANDARD)
 			: onRequest_(std::move(handler))
@@ -173,15 +180,15 @@ namespace DDE {
 			UINT res = DdeInitialize(
 				&idInst_,
 				(PFNCALLBACK)DdeCallback,
-				APPCMD_FILTERINITS | CBF_SKIP_CONNECT_CONFIRMS,
+				cmd, // APPCMD_FILTERINITS | CBF_SKIP_CONNECT_CONFIRMS,
 				0
 			);
 
 			if (res != DMLERR_NO_ERROR)
 				throw std::runtime_error("DdeInitialize failed");
 
-			hszService_ = StringHandle(service.c_str(), CP_WINANSI);
-			hszTopic_ = StringHandle(topic.c_str(), CP_WINANSI);
+			hszService_ = StringHandle(service.c_str());
+			hszTopic_ = StringHandle(topic.c_str());
 
 			if (!DdeNameService(idInst_, hszService_, 0, DNS_REGISTER))
 				throw std::runtime_error("DdeNameService failed");

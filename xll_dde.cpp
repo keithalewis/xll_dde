@@ -1,9 +1,9 @@
 #include "xll_dde.h"
-//#include <iostream>
+#include <iostream>
 
 using namespace DDE;
 
-int main()
+int test_dde()
 {
     DDE::Server server(
         TEXT("MyServer"),
@@ -14,7 +14,19 @@ int main()
             return Tstring(TEXT("Unknown item"));
         }
     );
-
     server.runMessageLoop();
+   
+    return 0;
+}
+
+int main()
+{
+    try {
+        test_dde();
+    }
+    catch (const std::exception& ex) {
+        std::cerr << ex.what() << std::endl;
+    }
+
     return 0;
 }
