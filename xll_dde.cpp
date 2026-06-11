@@ -3,7 +3,7 @@
 
 int main()
 {
-    DDEServer server(
+    DDE::Server server(
         "MyServer",
         "MyTopic",
         [](const std::string& item) {
