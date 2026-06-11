@@ -1,15 +1,17 @@
 #include "xll_dde.h"
 //#include <iostream>
 
+using namespace DDE;
+
 int main()
 {
     DDE::Server server(
-        "MyServer",
-        "MyTopic",
-        [](const std::string& item) {
-            if (item == "Hello")
-                return std::string("Hello from modern C++ DDE");
-            return std::string("Unknown item");
+        TEXT("MyServer"),
+        TEXT("MyTopic"),
+        [](const tstring& item) {
+            if (item == TEXT("Hello"))
+                return tstring(TEXT("Hello from modern C++ DDE"));
+            return tstring(TEXT("Unknown item"));
         }
     );
 

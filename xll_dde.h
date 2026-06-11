@@ -8,14 +8,16 @@
 
 namespace DDE {
 
+    using tstring = std::basic_string<TCHAR>;
+
     class StringHandle {
         DWORD id;
         HSZ hsz;
     public:
-        StringHandle(DWORD id, LPCSTR string)
+        StringHandle(DWORD id, LPCTSTR string, int cp = CP_WINNEUTRAL)
             : id(id)
         {
-            hsz = DdeCreateStringHandleA(id, string, CP_WINNEUTRAL);
+            hsz = DdeCreateStringHandle(id, string, cp);
         }
         StringHandle(const StringHandle&) = delete;
         StringHandle& operator=(const StringHandle&) = delete;
@@ -28,13 +30,34 @@ namespace DDE {
         {
             return DdeCmpStringHandles(hsz, hsz_) <=> 0;
         }
+
+        operator const HSZ() const
+        {
+            return hsz;
+        }
+
+        std::basic_string<TCHAR> QueryString() const
+        {
+            std::basic_string<TCHAR> sz;
+            
+            DWORD nb = DdeQueryString(id, hsz, 0, 0, CP_WINNEUTRAL);
+            if (nb != 0) {
+                sz.resize(nb);
+                nb = DdeQueryString(id, hsz, sz.data(), nb, CP_WINNEUTRAL);
+            }
+
+            return sz;
+        }
     };
   
     class Server {
     public:
         using RequestHandler =
-            std::function<std::string(const std::string& item)>;
-
+            std::function<tstring(const tstring& item)>;
+        HSZ StringHandle(LPCTSTR string, int cp = CP_WINNEUTRAL)
+        {
+            return DDE::StringHandle(idInst_, string, cp);
+        }
     private:
         DWORD idInst_ = 0;
         HSZ hszService_ = 0;
@@ -77,12 +100,12 @@ namespace DDE {
             switch (uType) {
             case XTYP_REQUEST:
                 if (uFmt == CF_TEXT && self->onRequest_) {
-                    char itemBuf[256];
-                    DdeQueryStringA(self->idInst_, hsz2,
+                    TCHAR itemBuf[256];
+                    DdeQueryString(self->idInst_, hsz2,
                         itemBuf, sizeof(itemBuf), CP_WINANSI);
 
-                    std::string item(itemBuf);
-                    std::string value = self->onRequest_(item);
+                    tstring item(itemBuf);
+                    tstring value = self->onRequest_(item);
 
                     return DdeCreateDataHandle(
                         self->idInst_,
@@ -101,9 +124,10 @@ namespace DDE {
         }
 
     public:
-        Server(const std::string& service,
-            const std::string& topic,
-            RequestHandler handler)
+        Server(const std::basic_string<TCHAR>& service,
+            const std::basic_string<TCHAR>& topic,
+            RequestHandler handler,
+            DWORD cmd = APPCLASS_STANDARD)
             : onRequest_(std::move(handler))
         {
             UINT res = DdeInitialize(
@@ -116,16 +140,14 @@ namespace DDE {
             if (res != DMLERR_NO_ERROR)
                 throw std::runtime_error("DdeInitialize failed");
 
-            hszService_ = DdeCreateStringHandleA(idInst_, service.c_str(), CP_WINANSI);
-            hszTopic_ = DdeCreateStringHandleA(idInst_, topic.c_str(), CP_WINANSI);
+            hszService_ = StringHandle(service.c_str(), CP_WINANSI);
+            hszTopic_ = StringHandle(topic.c_str(), CP_WINANSI);
 
             if (!DdeNameService(idInst_, hszService_, 0, DNS_REGISTER))
                 throw std::runtime_error("DdeNameService failed");
         }
 
         ~Server() {
-            if (hszService_) DdeFreeStringHandle(idInst_, hszService_);
-            if (hszTopic_)   DdeFreeStringHandle(idInst_, hszTopic_);
             if (idInst_)     DdeUninitialize(idInst_);
         }
 
