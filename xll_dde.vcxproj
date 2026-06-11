@@ -200,6 +200,8 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="clipboard.h" />
+    <ClInclude Include="error.h" />
     <ClInclude Include="xll_dde.h" />
   </ItemGroup>
   <ItemGroup>

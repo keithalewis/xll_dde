@@ -8,10 +8,10 @@ int main()
     DDE::Server server(
         TEXT("MyServer"),
         TEXT("MyTopic"),
-        [](const tstring& item) {
+        [](const Tstring& item) {
             if (item == TEXT("Hello"))
-                return tstring(TEXT("Hello from modern C++ DDE"));
-            return tstring(TEXT("Unknown item"));
+                return Tstring(TEXT("Hello from modern C++ DDE"));
+            return Tstring(TEXT("Unknown item"));
         }
     );
 

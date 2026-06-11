@@ -18,6 +18,12 @@
     <ClInclude Include="xll_dde.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="clipboard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="error.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="xll_dde.cpp">
