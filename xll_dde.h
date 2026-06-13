@@ -1,6 +1,6 @@
 #pragma once
 #include "error.h"
-#include <ddeml.h>
+#include "dde_defines.h"
 #include <compare>
 #include <span>
 #include <string>
@@ -77,7 +77,7 @@ namespace DDE {
 
 		Data Access() const
 		{
-			return DDE::AccessData(hData);
+			return AccessData(hData);
 		}
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddeadddata
 		// 
@@ -105,10 +105,10 @@ namespace DDE {
 		HSZ hsz;
 	public:
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddecreatestringhandlea?redirectedfrom=MSDN&devlangs=cpp&f1url=%3FappId%3DDev18IDEF1%26l%3DEN-US%26k%3Dk%28DDEML%2FDdeCreateStringHandle%29%3Bk%28DdeCreateStringHandle%29%3Bk%28DevLang-C%2B%2B%29%3Bk%28TargetOS-Windows%29%26rd%3Dtrue
-		StringHandle(DWORD id, LPCTSTR string)
+		StringHandle(DWORD id, const std::basic_string_view<TCHAR> string)
 			: id(id)
 		{
-			hsz = DdeCreateStringHandle(id, string, CP<TCHAR>::codepage);
+			hsz = DdeCreateStringHandle(id, string.data(), CP<TCHAR>::codepage);
 		}
 		StringHandle(const StringHandle&) = delete;
 		StringHandle& operator=(const StringHandle&) = delete;
@@ -152,14 +152,11 @@ namespace DDE {
 			return DDE::DataHandle(id, data, item, fmt, cmd);
 		}
 
-		auto StringHandle(LPCTSTR string)
+		auto StringHandle(const std::basic_string_view<TCHAR> string)
 		{
 			return DDE::StringHandle(id, string);
 		}
-		auto StringHandle(const Tstring string)
-		{
-			return StringHandle(string.c_str());
-		}
+
 	private:
 		DWORD id = 0;
 		HSZ hszService_ = 0;
