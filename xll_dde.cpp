@@ -25,7 +25,17 @@ int test_dde()
 int main()
 {
     try {
-        test_dde();
+        //test_dde();
+        DDE::Server server(
+            TEXT("MyServer"),
+            TEXT("MyTopic"),
+            [](const Tstring& item) {
+                if (item == TEXT("Hello"))
+                    return Tstring(TEXT("Hello from modern C++ DDE"));
+                return Tstring(TEXT("Unknown item"));
+            }
+        );
+        server.runMessageLoop();
     }
     catch (const std::exception& ex) {
         std::cerr << ex.what() << std::endl;

@@ -23,6 +23,7 @@ namespace DDE {
 	template<> struct CP<WCHAR> { static const UINT codepage = CP_WINUNICODE; };
 
 	// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddeaccessdata
+	// Return data as a span.
 	inline Data AccessData(HDDEDATA hData)
 	{
 		DWORD size;
@@ -44,6 +45,18 @@ namespace DDE {
 			hData = DdeCreateDataHandle(id, data.data(), (DWORD)data.size_bytes(),
 				0, item, fmt, cmd);
 		}
+		// Create from null terminated text.
+		DataHandle(DWORD id, LPCSTR data, HSZ item = NULL, UINT cmd = HDATA_APPOWNED)
+		{ 
+			hData = DdeCreateDataHandle(id, (LPBYTE)data, DWORD(strlen(data) + 1),
+				0, item, CF_TEXT, cmd);
+		}
+		// Create from null terminated UNICODE text.
+		DataHandle(DWORD id, LPCTSTR data, HSZ item = NULL, UINT cmd = HDATA_APPOWNED)
+		{
+			hData = DdeCreateDataHandle(id, (LPBYTE)data, DWORD((wcslen(data) + 1) * sizeof(WCHAR)),
+				0, item, CF_UNICODETEXT, cmd);
+		}
 		DataHandle(const DataHandle&) = delete;
 		DataHandle& operator=(const DataHandle&) = delete;
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddefreedatahandle
@@ -52,9 +65,38 @@ namespace DDE {
 			DdeFreeDataHandle(hData);
 		}
 
-		operator HDDEDATA() const
+		// After a data handle has been used as a parameter in another 
+		// Dynamic Data Exchange Management Library function or 
+		// has been returned by a DDE callback function, 
+		// the handle can be used only for read access 
+		// to the DDE object identified by the handle.
+		operator const HDDEDATA() const
 		{
 			return hData;
+		}
+
+		Data Access() const
+		{
+			return DDE::AccessData(hData);
+		}
+		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddeadddata
+		// 
+		DataHandle& Add(Data data, DWORD off = 0)
+		{
+			hData = DdeAddData(hData, data.data(), (DWORD)data.size(), off);
+			if (!hData)	CHECK_LAST_ERROR();
+
+			return *this;
+		}
+		DataHandle& Append(Data data)
+		{
+			return Add(data, (DWORD)Access().size());
+		}
+		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddeunaccessdata?devlangs=cpp&f1url=%3FappId%3DDev18IDEF1%26l%3DEN-US%26k%3Dk(DDEML%2FDdeUnaccessData);k(DdeUnaccessData);k(DevLang-C%2B%2B);k(TargetOS-Windows)%26rd%3Dtrue
+		// An application must call this function after it has finished accessing the object.
+		BOOL Unaccess()
+		{
+			return DdeUnaccessData(hData);
 		}
 	};
 
@@ -79,7 +121,7 @@ namespace DDE {
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddecmpstringhandles?devlangs=cpp&f1url=%3FappId%3DDev18IDEF1%26l%3DEN-US%26k%3Dk(DDEML%2FDdeCmpStringHandles);k(DdeCmpStringHandles);k(DevLang-C%2B%2B);k(TargetOS-Windows)%26rd%3Dtrue
 		auto operator<=>(HSZ hsz_) const
 		{
-			return (hsz, hsz_) <=> 0;
+			return DdeCmpStringHandles(hsz, hsz_) <=> 0;
 		}
 
 		operator const HSZ() const
@@ -104,16 +146,22 @@ namespace DDE {
 	class Server {
 	public:
 		using RequestHandler = std::function<Tstring(const Tstring& item)>;
+
+		auto DataHandle(Data data, HSZ item, UINT fmt, UINT cmd)
+		{
+			return DDE::DataHandle(id, data, item, fmt, cmd);
+		}
+
 		auto StringHandle(LPCTSTR string)
 		{
-			return DDE::StringHandle(idInst_, string);
+			return DDE::StringHandle(id, string);
 		}
 		auto StringHandle(const Tstring string)
 		{
 			return StringHandle(string.c_str());
 		}
 	private:
-		DWORD idInst_ = 0;
+		DWORD id = 0;
 		HSZ hszService_ = 0;
 		HSZ hszTopic_ = 0;
 		RequestHandler onRequest_;
@@ -155,14 +203,14 @@ namespace DDE {
 			case XTYP_REQUEST:
 				if (uFmt == CF_TEXT && self->onRequest_) {
 					TCHAR itemBuf[256];
-					DdeQueryString(self->idInst_, hsz2,
+					DdeQueryString(self->id, hsz2,
 						itemBuf, sizeof(itemBuf), CP<TCHAR>::codepage);
 
 					Tstring item(itemBuf);
 					Tstring value = self->onRequest_(item);
 
 					return DdeCreateDataHandle(
-						self->idInst_,
+						self->id,
 						(LPBYTE)value.c_str(),
 						static_cast<DWORD>(value.size() + 1),
 						0,
@@ -185,7 +233,7 @@ namespace DDE {
 			: onRequest_(std::move(handler))
 		{
 			UINT res = DdeInitialize(
-				&idInst_,
+				&id,
 				(PFNCALLBACK)DdeCallback,
 				cmd, // APPCMD_FILTERINITS | CBF_SKIP_CONNECT_CONFIRMS,
 				0
@@ -196,13 +244,13 @@ namespace DDE {
 
 			//hszTopic_ = StringHandle(topic);
 
-			if (!DdeNameService(idInst_, StringHandle(service), 0, DNS_REGISTER))
+			if (!DdeNameService(id, StringHandle(service), 0, DNS_REGISTER))
 				throw std::runtime_error("DdeNameService failed");
 		}
 
 		~Server() {
-			if (idInst_) {
-				DdeUninitialize(idInst_);
+			if (id) {
+				DdeUninitialize(id);
 			}
 		}
 

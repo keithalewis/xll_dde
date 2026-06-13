@@ -12,6 +12,5 @@ inline LPSTR FormatLastError(DWORD err = GetLastError())
 	return buf;
 }
 
-#define CHECK_LAST_ERROR() do { \
-	DWORD err = GetLastError(); \
+#define CHECK_LAST_ERROR() do { DWORD err = GetLastError(); \
 	if (err) throw std::runtime_error(FormatLastError(err)); } while(0);
