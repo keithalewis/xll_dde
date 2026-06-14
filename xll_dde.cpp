@@ -6,11 +6,10 @@ using namespace DDE;
 
 int test_dde()
 {
+    DDE::Service svc(TEXT("MyServer"));
     {
-        DDE::Service svc(TEXT("MyServer"));
-
         Hsz sh = svc.StringHandle(TEXT("MyText"));
-        Tstring qs = sh.QueryString();
+        Tstring qs = *sh;// sh.QueryString();
         Tstring qqs(TEXT("MyText"));
         bool b = (qs == TEXT("MyText"));
         b = (qs == qqs);
@@ -20,6 +19,9 @@ int test_dde()
         DataHandle dh = svc.DataHandle(Data(buf, sizeof(buf)), sh);
         Data da = dh.Access();
         assert(std::equal(da.begin(), da.end(), buf, buf + sizeof(buf)));
+        DataHandle dh2 = svc.DataHandle(Data(buf, sizeof(buf)), sh);
+        assert(dh != dh2);
+        assert(dh.Access() == dh2.Access());
 
     }
     return 0;
@@ -28,17 +30,14 @@ int test_dde()
 int main()
 {
     try {
-        test_dde();
+        //test_dde();
         DDE::Service service(TEXT("MyService"));
-        /*
-            TEXT("MyTopic"),
-            [](const Tstring& item) {
-                if (item == TEXT("Hello"))
-                    return Tstring(TEXT("Hello from modern C++ DDE"));
-                return Tstring(TEXT("Unknown item"));
-            }
-        );
-        */
+        TopicHandlers th;
+        th.handleRequest = [&service](UINT uFmt, HCONV hConv, HSZ item, HSZ topic) {
+            return DataHandle(service.Id(), TEXT("Hi"), item, CF<TCHAR>::text);
+            };
+        service.setTopic(TEXT("MyTopic"), th);
+
         service.runMessageLoop();
     }
     catch (const std::exception& ex) {

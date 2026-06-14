@@ -25,9 +25,8 @@ namespace DDE {
 	template<> struct CF<WCHAR> { static const UINT text = CF_UNICODETEXT; };
 
 	// Connections states (uState)
-#ifdef NULL
 #undef NULL
-#endif
+
 #define DDE_XST(X) \
 	X(NULL) \
 	X(INCOMPLETE) \
@@ -54,14 +53,14 @@ namespace DDE {
 #undef X
 	static_assert((UINT)XST::INCOMPLETE == XST_INCOMPLETE);
 
-#define X(i) if (static_cast<UINT>(dw) == XST_##i) return "XST_" #i; 
+#define X(i) if (ui == XST_##i) return "XST_" #i; 
 	// enum to string_view
-	constexpr const std::string_view XST_(enum XST dw) {
+	constexpr const std::string_view XST_(UINT ui) {
 		DDE_XST(X) 
 		throw std::out_of_range("DDE::XST_: not found");
 	}
 #undef X
-	static_assert(XST_(XST::INCOMPLETE) == "XST_INCOMPLETE");
+	static_assert(XST_((UINT)XST::INCOMPLETE) == "XST_INCOMPLETE");
 
 #define X(i) if (s == "XST_" #i) return XST::##i;
 	// string_view to enum
@@ -93,19 +92,19 @@ namespace DDE {
 #undef X
 	static_assert((UINT)ST::CONNECTED == ST_CONNECTED);
 
-#define X(i) if (static_cast<UINT>(dw) == ST_##i) return "ST_" #i; 
+#define X(i) if (ui == ST_##i) return "ST_" #i; 
 	// enum to string_view
-	constexpr const std::string_view ST_(enum ST dw) {
+	constexpr const char* ST_(UINT ui) {
 		DDE_ST(X) return "";
 	}
 #undef X
-	static_assert(ST_(ST::CONNECTED) == "ST_CONNECTED");
+	static_assert(ST_((UINT)ST::CONNECTED) == "ST_CONNECTED");
 
 #define X(i) if (s == "ST_" #i) return ST::##i;
 	// string_view to enum
 	constexpr ST _ST(const std::string_view s) {
 		DDE_ST(X)
-			throw std::out_of_range("DDE::_ST: not found");
+		throw std::out_of_range("DDE::_ST: not found");
 	}
 #undef X
 	static_assert(_ST("ST_CONNECTED") == ST::CONNECTED);
@@ -121,7 +120,6 @@ namespace DDE {
 	X(FAPPSTATUS) \
 	X(FNOTPROCESSED) \
 
-
 #define X(i) i = DDE_##i,
 	enum class Dde : UINT {
 		DDE_DDE(X)
@@ -129,19 +127,19 @@ namespace DDE {
 #undef X
 	static_assert((UINT)Dde::FACK == DDE_FACK);
 
-#define X(i) if (static_cast<UINT>(dw) == DDE_##i) return "DDE_" #i; 
+#define X(i) if (ui == DDE_##i) return "DDE_" #i; 
 	// enum to string_view
-	constexpr const std::string_view DDE_(enum Dde dw) {
+	constexpr const char* DDE_(UINT ui) {
 		DDE_DDE(X) return "";
 	}
 #undef X
-	static_assert(DDE_(Dde::FACK) == "DDE_FACK");
+	static_assert(DDE_((UINT)Dde::FACK) == "DDE_FACK");
 
 #define X(i) if (s == "DDE_" #i) return Dde::##i;
 	// string_view to enum
 	constexpr Dde _DDE(const std::string_view s) {
 		DDE_DDE(X)
-			throw std::out_of_range("DDE::_DDE: not found");
+		throw std::out_of_range("DDE::_DDE: not found");
 	}
 #undef X
 	static_assert(_DDE("DDE_FACK") == Dde::FACK);
@@ -189,27 +187,83 @@ namespace DDE {
 #undef X
 	static_assert((UINT)XTYP::ERROR == XTYP_ERROR);
 
-#define X(i) if (static_cast<UINT>(dw) == XTYP_##i) return "XTYP_" #i; 
+#define X(i) if (ui == XTYP_##i) return "XTYP_" #i; 
 	// enum to string_view
-	constexpr const std::string_view XTYP_(enum XTYP dw) {
+	constexpr const char* XTYP_(UINT ui) {
 		DDE_XTYP(X) return "";
 	}
 #undef X
-	static_assert(XTYP_(XTYP::ERROR) == "XTYP_ERROR");
+	static_assert(XTYP_((UINT)XTYP::ERROR) == "XTYP_ERROR");
 
 #define X(i) if (s == "XTYP_" #i) return XTYP::##i;
 	// string_view to enum
 	constexpr XTYP _XTYP(const std::string_view s) {
 		DDE_XTYP(X)
-			throw std::out_of_range("DDE::_XTYP: not found");
+		throw std::out_of_range("DDE::_XTYP: not found");
 	}
 #undef X
 	static_assert(_XTYP("XTYP_ERROR") == XTYP::ERROR);
+
 #ifdef _ERROR
 #define ERROR _ERROR
 #undef _ERROR
 #endif
 
-} // namespace XTYP
+#ifdef NO_ERROR
+#define _NO_ERROR NO_ERROR
+#undef NO_ERROR
+#endif
+
+#define DDE_DMLERR(X) \
+	X(NO_ERROR) \
+	X(ADVACKTIMEOUT) \
+	X(BUSY) \
+	X(DATAACKTIMEOUT) \
+	X(DLL_NOT_INITIALIZED) \
+	X(DLL_USAGE) \
+	X(EXECACKTIMEOUT) \
+	X(INVALIDPARAMETER) \
+	X(LOW_MEMORY) \
+	X(MEMORY_ERROR) \
+	X(NOTPROCESSED) \
+	X(NO_CONV_ESTABLISHED) \
+	X(POKEACKTIMEOUT) \
+	X(POSTMSG_FAILED) \
+	X(REENTRANCY) \
+	X(SERVER_DIED) \
+	X(SYS_ERROR) \
+	X(UNADVACKTIMEOUT) \
+	X(UNFOUND_QUEUE_ID) \
+
+#define X(i) i = DMLERR_##i,
+	enum class DMLERR : UINT {
+		DDE_DMLERR(X)
+	};
+#undef X
+	static_assert((UINT)DMLERR::BUSY == DMLERR_BUSY);
+
+#define X(i) if (ui == DMLERR_##i) return "DMLERR_" #i; 
+	// enum to string_view
+	constexpr const char* DMLERR_(UINT ui) {
+		DDE_DMLERR(X) return "";
+	}
+#undef X
+	static_assert(DMLERR_((UINT)DMLERR::BUSY) == "DMLERR_BUSY");
+
+#define X(i) if (s == "DMLERR_" #i) return DMLERR::##i;
+	// string_view to enum
+	constexpr DMLERR _DMLERR(const std::string_view s) {
+		DDE_DMLERR(X)
+		throw std::out_of_range("DDE::_DMLERR: not found");
+	}
+#undef X
+	static_assert(_DMLERR("DMLERR_BUSY") == DMLERR::BUSY);
+
+#ifdef _NO_ERROR
+#define NO_ERROR _NO_ERROR
+#undef _NO_ERROR
+#endif
+
+} // namespace DDE
 
 #undef DDE_I2S

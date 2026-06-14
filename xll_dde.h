@@ -23,6 +23,10 @@ namespace DDE {
 
 		return Data(data, size);
 	}
+	inline bool operator==(const Data& a, const Data& b)
+	{
+		return std::equal(a.begin(), a.end(), b.begin(), b.end());
+	}
 
 	class DataHandle {
 		HDDEDATA hData;
@@ -128,7 +132,7 @@ namespace DDE {
 			return DdeCmpStringHandles(hsz, hsz_) <=> 0;
 		}
 
-		operator const HSZ() const
+		operator HSZ() const
 		{
 			return hsz;
 		}
@@ -155,39 +159,36 @@ namespace DDE {
 	using Hsz = StringHandle<TCHAR>;
 
 	struct TopicHandlers {
-		//requestHandlee 
+		std::function<HDDEDATA(UINT uFmt, HCONV hConv, HSZ item, HSZ topic)> handleRequest;
+		// handlePoke
+		// handleAdvreq
 	};
 	
 	class Service;
-
-	struct HSZcmp {
-		static bool operator()(HSZ a, HSZ b) noexcept 
-		{
-			return DdeCmpStringHandles(a, b) < 0;
-		}
-	};
 	// Global map from service name to Id and Service.
-	inline thread_local std::map<HSZ, std::pair<DWORD,Service*>, HSZcmp> g_idService;
+	inline std::map<Tstring, std::pair<DWORD,Service*>> g_idService;
+	inline Service* g_pService;
 
 	class Service {
 		DWORD id_ = 0;
-		Hsz service_;
-		std::map<HSZ, int> topic_; // TODO: all topics?
+		Tstring service_;
+		std::map<Tstring, TopicHandlers> topic_; //
 	public:
-		Service(const std::basic_string<TCHAR>& service, DWORD cmd = APPCLASS_STANDARD)
+		Service(const Tstring& service, DWORD cmd = APPCLASS_STANDARD)
+			: service_(service)
 		{
 			// TODO: cmd |= APPCMD_FILTERINITS | CBF_SKIP_CONNECT_CONFIRMS, 0);
 			if (DMLERR_NO_ERROR != DdeInitialize(&id_, (PFNCALLBACK)DdeCallback, cmd, 0)) {
-				THROW_LAST_ERROR(DdeGetLastError(id_));
+				throw std::runtime_error(DDE::DMLERR_(DdeGetLastError(id_)));
 			}
 
-			service_ = std::move(Hsz(id_, service));
-
-			if (0 == DdeNameService(id_, service_, 0, DNS_REGISTER)) {
-				THROW_LAST_ERROR(DdeGetLastError(id_));
-			}
+			HSZ _service = Hsz(id_, service_);
+			if (0 == DdeNameService(id_, _service, 0, DNS_REGISTER)) {
+				throw std::runtime_error(DDE::DMLERR_(DdeGetLastError(id_)));
+			}	
 
 			// TODO: ???check if service exists???
+			g_pService = this;
 			g_idService[service_] = std::pair(id_, this);
 		}
 		Service(const Service&) = delete;
@@ -198,7 +199,7 @@ namespace DDE {
 				if (g_idService.count(service_)) {
 					g_idService.erase(service_);
 				}
-				DdeNameService(id_, service_, 0, DNS_UNREGISTER);
+				DdeNameService(id_, Hsz(id_, service_), 0, DNS_UNREGISTER);
 				DdeUninitialize(id_);
 			}
 		}
@@ -206,18 +207,31 @@ namespace DDE {
 		{
 			return id_;
 		}
-		auto serviceName() const
+		Tstring serviceName() const
 		{
-			return service_.QueryString();
+			return service_;
 		}
 
+		Service& setTopic(const Tstring& topic, const TopicHandlers& th)
+		{
+			topic_[topic] = th;
+
+			return *this;
+		}
+		const TopicHandlers* getTopic(const Tstring& topic) const
+		{
+			const auto tp = topic_.find(topic);
+
+			return tp != topic_.end() ? &(tp->second) : nullptr;
+		}
+		
 		// Supply service id for DDEML functions
 		DDE::DataHandle DataHandle(Data data, HSZ item, UINT fmt = CF<TCHAR>::text, UINT cmd = HDATA_APPOWNED)
 		{
 			return DDE::DataHandle(id_, data, item, fmt, cmd);
 		}
 
-		DDE::StringHandle<TCHAR> StringHandle(const std::basic_string<TCHAR> string)
+		DDE::StringHandle<TCHAR> StringHandle(const Tstring& string)
 		{
 			return DDE::StringHandle(id_, string);
 		}
@@ -226,18 +240,28 @@ namespace DDE {
 		HDDEDATA Callback(UINT uType, UINT uFmt, HCONV hConv,
 			HSZ topic, HSZ service, HDDEDATA hData)
 		{
+			const TopicHandlers* ptopic = getTopic(*Hsz(id_, topic));
+			// Lookup topic handlers
 			CONVINFO hInfo = { 0 };
 			DdeQueryConvInfo(hConv, QID_SYNC, &hInfo);
-
-			// Lookup topic handlers
+			std::string s;
+			Tstring ts;
+			s = XTYP_(uType);
+			ts = Hsz(id_, hInfo.hszSvcPartner).QueryString();
+			ts = Hsz(id_, hInfo.hszServiceReq).QueryString();
+			ts = Hsz(id_, hInfo.hszTopic).QueryString();
+			ts = Hsz(id_, hInfo.hszItem).QueryString();
+			s = XTYP_(hInfo.wType);
+			ts = *Hsz(id_, topic);
+			ts = *Hsz(id_, service);
 
 			switch (uType) {
-
-			case XTYP_CONNECT:
-				return (HDDEDATA)(service == service_ && g_idService.count(topic));
-
+			case XTYP_CONNECT: {
+				auto cnd = g_idService[*Hsz(id_, service)];
+				return (HDDEDATA)(service_ == *Hsz(id_, service) && g_idService.count(*Hsz(id_, topic)));
+			}
 			case XTYP_REQUEST:
-				return 0;// handleRequest(topic, service, uFmt);
+				return ptopic->handleRequest(uFmt, hConv, hInfo.hszItem, topic);
 
 			case XTYP_POKE:
 				return 0;// handlePoke(topic, service, uFmt, hData);
@@ -252,33 +276,15 @@ namespace DDE {
 				return nullptr;
 			}
 		}
-	protected:
-		// Function that can be overridden in derived class
-		virtual HDDEDATA handleRequest(HSZ service, HSZ topic, UINT fmt)
-		{
-			return 0; 
-		}
 	private:
-		static HDDEDATA CALLBACK DdeCallback(
-			UINT uType, UINT uFmt, HCONV hConv,
-			HSZ topic, HSZ service, HDDEDATA hData,
-			ULONG_PTR dw1, ULONG_PTR dw2)
+		static HDDEDATA CALLBACK DdeCallback(UINT uType, UINT uFmt, HCONV hConv,
+			HSZ topic, HSZ service, HDDEDATA hData, ULONG_PTR dw1, ULONG_PTR dw2)
 		{
-			DWORD id = 0;
-			Service* pservice = reinterpret_cast<Service*>(dw2);
 
-			// Hook up instance data.
-			if (!pservice) {
-				assert(g_idService.count(service));
-				std::tie(id, pservice) = g_idService[service];
-				// Subsequent calls will have pservice in dw2.
-				DdeSetUserHandle(hConv, QID_SYNC, (ULONG_PTR)pservice);
-			}
-			else {
-				id = pservice->Id();
-			}
-
-			return pservice->Callback(uType, uFmt, hConv, topic, service, hData);
+			Hsz svc(g_pService->Id(), service);
+			//int cmp = DdeCmpStringHandles(service, svc);
+			auto psvc = svc.QueryString();
+			return g_pService->Callback(uType, uFmt, hConv, topic, service, hData);
 		}
 	public:
 		void runMessageLoop() {
