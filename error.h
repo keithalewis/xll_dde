@@ -1,5 +1,6 @@
 // error.h - Error messaged
 #pragma once
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <stdexcept>
 
@@ -12,5 +13,4 @@ inline LPSTR FormatLastError(DWORD err = GetLastError())
 	return buf;
 }
 
-#define CHECK_LAST_ERROR() do { DWORD err = GetLastError(); \
-	if (err) throw std::runtime_error(FormatLastError(err)); } while(0);
+#define THROW_LAST_ERROR(err) do { if (err) throw std::runtime_error(FormatLastError(err)); } while(0);

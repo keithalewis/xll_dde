@@ -1,12 +1,28 @@
-// dde_defines.h
+// dde_defines.hh
 #pragma once
 #include <stdexcept>
 #include <string_view>
+#define WIN32_LEAN_AND_MEAN
 #include <ddeml.h>
 
 #define DDE_I2S(i) if (dw == i) return #i; 
 
 namespace DDE {
+
+	// Codepage traits
+	enum class CP : UINT {
+		WINANSI = CP_WINANSI,
+		WINUNICODE = CP_WINUNICODE
+	};
+
+	template<typename T> struct CP_ { static const CP codepage; };
+	template<> struct CP_<CHAR> { static const CP codepage = CP::WINANSI; };
+	template<> struct CP_<WCHAR> { static const CP codepage = CP::WINUNICODE; };
+
+	// Clipboard format traits
+	template<typename T> struct CF { static const UINT text; };
+	template<> struct CF<CHAR> { static const UINT text = CF_TEXT; };
+	template<> struct CF<WCHAR> { static const UINT text = CF_UNICODETEXT; };
 
 	// Connections states (uState)
 #ifdef NULL
@@ -32,13 +48,13 @@ namespace DDE {
 	X(ADVDATAACKRCVD) \
 
 #define X(i) i = XST_##i,
-	enum class XST : DWORD {
+	enum class XST : UINT {
 		DDE_XST(X)
 	};
 #undef X
-	static_assert((DWORD)XST::INCOMPLETE == XST_INCOMPLETE);
+	static_assert((UINT)XST::INCOMPLETE == XST_INCOMPLETE);
 
-#define X(i) if (static_cast<DWORD>(dw) == XST_##i) return "XST_" #i; 
+#define X(i) if (static_cast<UINT>(dw) == XST_##i) return "XST_" #i; 
 	// enum to string_view
 	constexpr const std::string_view XST_(enum XST dw) {
 		DDE_XST(X) 
@@ -71,13 +87,13 @@ namespace DDE {
 	X(ISSELF) \
 
 #define X(i) i = ST_##i,
-	enum class ST : DWORD {
+	enum class ST : UINT {
 		DDE_ST(X)
 	};
 #undef X
-	static_assert((DWORD)ST::CONNECTED == ST_CONNECTED);
+	static_assert((UINT)ST::CONNECTED == ST_CONNECTED);
 
-#define X(i) if (static_cast<DWORD>(dw) == ST_##i) return "ST_" #i; 
+#define X(i) if (static_cast<UINT>(dw) == ST_##i) return "ST_" #i; 
 	// enum to string_view
 	constexpr const std::string_view ST_(enum ST dw) {
 		DDE_ST(X) return "";
@@ -107,13 +123,13 @@ namespace DDE {
 
 
 #define X(i) i = DDE_##i,
-	enum class Dde : DWORD {
+	enum class Dde : UINT {
 		DDE_DDE(X)
 	};
 #undef X
-	static_assert((DWORD)Dde::FACK == DDE_FACK);
+	static_assert((UINT)Dde::FACK == DDE_FACK);
 
-#define X(i) if (static_cast<DWORD>(dw) == DDE_##i) return "DDE_" #i; 
+#define X(i) if (static_cast<UINT>(dw) == DDE_##i) return "DDE_" #i; 
 	// enum to string_view
 	constexpr const std::string_view DDE_(enum Dde dw) {
 		DDE_DDE(X) return "";
@@ -130,13 +146,6 @@ namespace DDE {
 #undef X
 	static_assert(_DDE("DDE_FACK") == Dde::FACK);
 
-#define DDE_CODEPAGES(X) \
-	X(CP_WINANSI) \
-	X(CP_WINUNICODE) \
-
-	constexpr const char* CODEPAGE(unsigned long dw) {
-		DDE_CODEPAGES(DDE_I2S) return "";
-	}
 
 #define DDE_XTYPF(X) \
 	X(XTYPF_NOBLOCK) \
@@ -151,27 +160,56 @@ namespace DDE {
 	X(XCLASS_NOTIFICATION) \
 
 	// Transaction types
-#define DDE_XTYPS(X) \
-	X(XTYP_ERROR) \
-	X(XTYP_ADVDATA) \
-	X(XTYP_ADVREQ) \
-	X(XTYP_ADVSTART) \
-	X(XTYP_ADVSTOP) \
-	X(XTYP_EXECUTE) \
-	X(XTYP_CONNECT) \
-	X(XTYP_CONNECT_CONFIRM) \
-	X(XTYP_XACT_COMPLETE) \
-	X(XTYP_POKE) \
-	X(XTYP_REGISTER) \
-	X(XTYP_REQUEST) \
-	X(XTYP_DISCONNECT) \
-	X(XTYP_UNREGISTER) \
-	X(XTYP_WILDCONNECT) \
+#ifdef ERROR
+#define _ERROR ERROR
+#undef ERROR
+#endif
 
-	constexpr const char* XTYP(unsigned long dw) {
-		DDE_XTYPS(DDE_I2S) return "";
+#define DDE_XTYP(X) \
+	X(ERROR) \
+	X(ADVDATA) \
+	X(ADVREQ) \
+	X(ADVSTART) \
+	X(ADVSTOP) \
+	X(EXECUTE) \
+	X(CONNECT) \
+	X(CONNECT_CONFIRM) \
+	X(XACT_COMPLETE) \
+	X(POKE) \
+	X(REGISTER) \
+	X(REQUEST) \
+	X(DISCONNECT) \
+	X(UNREGISTER) \
+	X(WILDCONNECT) \
+
+#define X(i) i = XTYP_##i,
+	enum class XTYP : UINT {
+		DDE_XTYP(X)
+	};
+#undef X
+	static_assert((UINT)XTYP::ERROR == XTYP_ERROR);
+
+#define X(i) if (static_cast<UINT>(dw) == XTYP_##i) return "XTYP_" #i; 
+	// enum to string_view
+	constexpr const std::string_view XTYP_(enum XTYP dw) {
+		DDE_XTYP(X) return "";
 	}
+#undef X
+	static_assert(XTYP_(XTYP::ERROR) == "XTYP_ERROR");
 
-} // namespace DDE
+#define X(i) if (s == "XTYP_" #i) return XTYP::##i;
+	// string_view to enum
+	constexpr XTYP _XTYP(const std::string_view s) {
+		DDE_XTYP(X)
+			throw std::out_of_range("DDE::_XTYP: not found");
+	}
+#undef X
+	static_assert(_XTYP("XTYP_ERROR") == XTYP::ERROR);
+#ifdef _ERROR
+#define ERROR _ERROR
+#undef _ERROR
+#endif
+
+} // namespace XTYP
 
 #undef DDE_I2S

@@ -6,9 +6,9 @@ using namespace DDE;
 
 int test_dde()
 {
-    DDE::Server server(
+    /*
+    DDE::Service server(
         TEXT("MyServer"),
-        TEXT("MyTopic"),
         [](const Tstring& item) {
             if (item == TEXT("Hello"))
                 return Tstring(TEXT("Hello from modern C++ DDE"));
@@ -18,16 +18,16 @@ int test_dde()
     auto sh = server.StringHandle(TEXT("MyText"));
     auto qs = sh.QueryString();
     assert(qs == TEXT("MyText"));
-   
+   */
     return 0;
 }
 
 int main()
 {
     try {
-        //test_dde();
-        DDE::Server server(
-            TEXT("MyServer"),
+        test_dde();
+        DDE::Service service(TEXT("MyService"));
+        /*
             TEXT("MyTopic"),
             [](const Tstring& item) {
                 if (item == TEXT("Hello"))
@@ -35,7 +35,8 @@ int main()
                 return Tstring(TEXT("Unknown item"));
             }
         );
-        server.runMessageLoop();
+        */
+        service.runMessageLoop();
     }
     catch (const std::exception& ex) {
         std::cerr << ex.what() << std::endl;
