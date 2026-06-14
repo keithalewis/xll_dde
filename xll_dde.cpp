@@ -8,12 +8,19 @@ int test_dde()
 {
     {
         DDE::Service svc(TEXT("MyServer"));
+
         Hsz sh = svc.StringHandle(TEXT("MyText"));
         Tstring qs = sh.QueryString();
         Tstring qqs(TEXT("MyText"));
         bool b = (qs == TEXT("MyText"));
         b = (qs == qqs);
         assert(qs == TEXT("MyText"));
+
+        BYTE buf[3] = { 1,2,3 };
+        DataHandle dh = svc.DataHandle(Data(buf, sizeof(buf)), sh);
+        Data da = dh.Access();
+        assert(std::equal(da.begin(), da.end(), buf, buf + sizeof(buf)));
+
     }
     return 0;
 }

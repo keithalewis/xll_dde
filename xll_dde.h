@@ -159,8 +159,15 @@ namespace DDE {
 	};
 	
 	class Service;
+
+	struct HSZcmp {
+		static bool operator()(HSZ a, HSZ b) noexcept 
+		{
+			return DdeCmpStringHandles(a, b) < 0;
+		}
+	};
 	// Global map from service name to Id and Service.
-	inline thread_local std::unordered_map<HSZ, std::pair<DWORD,Service*>> g_idService;
+	inline thread_local std::map<HSZ, std::pair<DWORD,Service*>, HSZcmp> g_idService;
 
 	class Service {
 		DWORD id_ = 0;
@@ -205,7 +212,7 @@ namespace DDE {
 		}
 
 		// Supply service id for DDEML functions
-		DDE::DataHandle DataHandle(Data data, HSZ item, UINT fmt, UINT cmd = HDATA_APPOWNED)
+		DDE::DataHandle DataHandle(Data data, HSZ item, UINT fmt = CF<TCHAR>::text, UINT cmd = HDATA_APPOWNED)
 		{
 			return DDE::DataHandle(id_, data, item, fmt, cmd);
 		}
