@@ -83,12 +83,6 @@ namespace DDE {
 		}
 	};
 
-	struct HandleRequest {
-		//request;
-		//poke;
-		//advise;
-	};
-
 	template<typename T>
 	// require T = CHAR or TCHART
 	class StringHandle {
@@ -99,7 +93,7 @@ namespace DDE {
 			: id(0), hsz(0)
 		{ }
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddecreatestringhandlea?redirectedfrom=MSDN&devlangs=cpp&f1url=%3FappId%3DDev18IDEF1%26l%3DEN-US%26k%3Dk%28DDEML%2FDdeCreateStringHandle%29%3Bk%28DdeCreateStringHandle%29%3Bk%28DevLang-C%2B%2B%29%3Bk%28TargetOS-Windows%29%26rd%3Dtrue
-		StringHandle(DWORD id, const std::basic_string_view<T> string)
+		StringHandle(DWORD id, const std::basic_string<T>& string)
 			: id(id)
 		{
 			hsz = DdeCreateStringHandle(id, string.data(), (UINT)CP_<T>::codepage);
@@ -107,7 +101,7 @@ namespace DDE {
 		StringHandle(DWORD id, HSZ hsz)
 			: id(id), hsz(hsz)
 		{ }
-		// TODO: reference counting???
+		// TODO: reference counting??? DdeKeepStringHandle
 		StringHandle(const StringHandle&) = delete;
 		StringHandle(StringHandle&& sh) noexcept
 			: id(sh.id), hsz(sh.hsz)
@@ -118,7 +112,7 @@ namespace DDE {
 			id = sh.id;
 			hsz = sh.hsz;
 			sh.id = 0;
-			hsz = 0;
+			sh.hsz = 0;
 
 			return *this;
 		}
@@ -145,7 +139,7 @@ namespace DDE {
 
 			DWORD nb = DdeQueryString(id, hsz, 0, 0, (UINT)CP_<TCHAR>::codepage);
 			if (nb != 0) {
-				sz.resize(nb + 1);
+				sz.resize(nb);
 				nb = DdeQueryString(id, hsz, sz.data(), nb + 1, (UINT)CP_<TCHAR>::codepage);
 			}
 
@@ -160,37 +154,33 @@ namespace DDE {
 	// HSZ value type
 	using Hsz = StringHandle<TCHAR>;
 
+	struct TopicHandlers {
+		//requestHandlee 
+	};
+	
 	class Service;
 	// Global map from service name to Id and Service.
 	inline thread_local std::unordered_map<HSZ, std::pair<DWORD,Service*>> g_idService;
-
-	// Forward declaration.
-	HDDEDATA CALLBACK DdeCallback(
-		UINT uType, UINT uFmt, HCONV hConv,
-		HSZ topic, HSZ service, HDDEDATA hData,
-		ULONG_PTR dw1, ULONG_PTR dw2);
 
 	class Service {
 		DWORD id_ = 0;
 		Hsz service_;
 		std::map<HSZ, int> topic_; // TODO: all topics?
 	public:
-		Service(const std::basic_string_view<TCHAR>& service, DWORD cmd = APPCLASS_STANDARD)
+		Service(const std::basic_string<TCHAR>& service, DWORD cmd = APPCLASS_STANDARD)
 		{
-			UINT ret;
-
 			// TODO: cmd |= APPCMD_FILTERINITS | CBF_SKIP_CONNECT_CONFIRMS, 0);
-			ret = DdeInitialize(&id_, (PFNCALLBACK)DdeCallback, cmd, 0);
-			if (DMLERR_NO_ERROR != ret) {
+			if (DMLERR_NO_ERROR != DdeInitialize(&id_, (PFNCALLBACK)DdeCallback, cmd, 0)) {
 				THROW_LAST_ERROR(DdeGetLastError(id_));
 			}
 
-			if (!DdeNameService(id_, service_, 0, DNS_REGISTER)) {
+			service_ = std::move(Hsz(id_, service));
+
+			if (0 == DdeNameService(id_, service_, 0, DNS_REGISTER)) {
 				THROW_LAST_ERROR(DdeGetLastError(id_));
 			}
 
 			// TODO: ???check if service exists???
-			service_ = std::move(Hsz(id_, service));
 			g_idService[service_] = std::pair(id_, this);
 		}
 		Service(const Service&) = delete;
@@ -213,14 +203,14 @@ namespace DDE {
 		{
 			return service_.QueryString();
 		}
-		
+
 		// Supply service id for DDEML functions
 		DDE::DataHandle DataHandle(Data data, HSZ item, UINT fmt, UINT cmd = HDATA_APPOWNED)
 		{
 			return DDE::DataHandle(id_, data, item, fmt, cmd);
 		}
 
-		DDE::StringHandle<TCHAR> StringHandle(const std::basic_string_view<TCHAR> string)
+		DDE::StringHandle<TCHAR> StringHandle(const std::basic_string<TCHAR> string)
 		{
 			return DDE::StringHandle(id_, string);
 		}
@@ -231,6 +221,8 @@ namespace DDE {
 		{
 			CONVINFO hInfo = { 0 };
 			DdeQueryConvInfo(hConv, QID_SYNC, &hInfo);
+
+			// Lookup topic handlers
 
 			switch (uType) {
 

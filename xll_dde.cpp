@@ -6,19 +6,15 @@ using namespace DDE;
 
 int test_dde()
 {
-    /*
-    DDE::Service server(
-        TEXT("MyServer"),
-        [](const Tstring& item) {
-            if (item == TEXT("Hello"))
-                return Tstring(TEXT("Hello from modern C++ DDE"));
-            return Tstring(TEXT("Unknown item"));
-        }
-    );
-    auto sh = server.StringHandle(TEXT("MyText"));
-    auto qs = sh.QueryString();
-    assert(qs == TEXT("MyText"));
-   */
+    {
+        DDE::Service svc(TEXT("MyServer"));
+        Hsz sh = svc.StringHandle(TEXT("MyText"));
+        Tstring qs = sh.QueryString();
+        Tstring qqs(TEXT("MyText"));
+        bool b = (qs == TEXT("MyText"));
+        b = (qs == qqs);
+        assert(qs == TEXT("MyText"));
+    }
     return 0;
 }
 
