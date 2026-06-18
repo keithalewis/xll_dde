@@ -5,28 +5,30 @@
 #define WIN32_LEAN_AND_MEAN
 #include <ddeml.h>
 
-#define DDE_I2S(i) if (dw == i) return #i; 
-
 namespace DDE {
 
 	// Codepage traits
-	enum class CP : UINT {
+	enum class CP {
 		WINANSI = CP_WINANSI,
 		WINUNICODE = CP_WINUNICODE
 	};
-
-	template<typename T> struct CP_ { static const CP codepage; };
-	template<> struct CP_<CHAR> { static const CP codepage = CP::WINANSI; };
-	template<> struct CP_<WCHAR> { static const CP codepage = CP::WINUNICODE; };
+	template<typename T> struct CP_ { static const CP value; };
+	template<> struct CP_<CHAR> { static const CP value = CP::WINANSI; };
+	template<> struct CP_<WCHAR> { static const CP value = CP::WINUNICODE; };
 
 	// Clipboard format traits
-	template<typename T> struct CF { static const UINT text; };
-	template<> struct CF<CHAR> { static const UINT text = CF_TEXT; };
-	template<> struct CF<WCHAR> { static const UINT text = CF_UNICODETEXT; };
+	enum class CF : UINT {
+		TEXT = CF_TEXT,
+		UNICODETEXT = CF_UNICODETEXT,
+		// TODO: bitmap, etc
+	};
+	template<typename T> struct CF_ { static const UINT value; };
+	template<> struct CF_<CHAR> { static const UINT value = CF_TEXT; };
+	template<> struct CF_<WCHAR> { static const UINT value = CF_UNICODETEXT; };
 
-	// Connections states (uState)
 #undef NULL
 
+	// Connections states (uState)
 #define DDE_XST(X) \
 	X(NULL) \
 	X(INCOMPLETE) \
@@ -54,8 +56,8 @@ namespace DDE {
 	static_assert((UINT)XST::INCOMPLETE == XST_INCOMPLETE);
 
 #define X(i) if (ui == XST_##i) return "XST_" #i; 
-	// enum to string_view
-	constexpr const std::string_view XST_(UINT ui) {
+	// enum to string
+	constexpr const char* XST_(UINT ui) {
 		DDE_XST(X) 
 		throw std::out_of_range("DDE::XST_: not found");
 	}
@@ -93,7 +95,7 @@ namespace DDE {
 	static_assert((UINT)ST::CONNECTED == ST_CONNECTED);
 
 #define X(i) if (ui == ST_##i) return "ST_" #i; 
-	// enum to string_view
+	// enum to string
 	constexpr const char* ST_(UINT ui) {
 		DDE_ST(X) return "";
 	}
@@ -128,7 +130,7 @@ namespace DDE {
 	static_assert((UINT)Dde::FACK == DDE_FACK);
 
 #define X(i) if (ui == DDE_##i) return "DDE_" #i; 
-	// enum to string_view
+	// enum to string
 	constexpr const char* DDE_(UINT ui) {
 		DDE_DDE(X) return "";
 	}
@@ -188,7 +190,7 @@ namespace DDE {
 	static_assert((UINT)XTYP::ERROR == XTYP_ERROR);
 
 #define X(i) if (ui == XTYP_##i) return "XTYP_" #i; 
-	// enum to string_view
+	// enum to string
 	constexpr const char* XTYP_(UINT ui) {
 		DDE_XTYP(X) return "";
 	}
@@ -243,7 +245,7 @@ namespace DDE {
 	static_assert((UINT)DMLERR::BUSY == DMLERR_BUSY);
 
 #define X(i) if (ui == DMLERR_##i) return "DMLERR_" #i; 
-	// enum to string_view
+	// enum to string
 	constexpr const char* DMLERR_(UINT ui) {
 		DDE_DMLERR(X) return "";
 	}
@@ -265,5 +267,3 @@ namespace DDE {
 #endif
 
 } // namespace DDE
-
-#undef DDE_I2S

@@ -7,8 +7,12 @@
 #include <string>
 #include <functional>
 #include <stdexcept>
+#include <concepts>
 
 namespace DDE {
+
+	template<typename T>
+	concept is_win_char = std::same_as<T, CHAR> or std::same_as<T, WCHAR>;
 
 	using Tstring = std::basic_string<TCHAR>;
 	using Data = std::span<BYTE>;
@@ -33,28 +37,25 @@ namespace DDE {
 	public:
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddecreatedatahandle
 		DataHandle(DWORD id, Data data, HSZ item = NULL, 
-			UINT fmt = CF<TCHAR>::text, UINT cmd = HDATA_APPOWNED)
+			UINT fmt = CF_<TCHAR>::value, UINT cmd = HDATA_APPOWNED)
 			: hData{ DdeCreateDataHandle(id, data.data(), (DWORD)data.size_bytes(),
 				0, item, fmt, cmd) }
 		{ }
-		// Create from null terminated text.
+		// Create from null terminated value.
 		DataHandle(DWORD id, LPCSTR data, HSZ item = NULL, UINT cmd = HDATA_APPOWNED)
-		{ 
-			hData = DdeCreateDataHandle(id, (LPBYTE)data, DWORD(strlen(data) + 1),
-				0, item, CF_TEXT, cmd);
-		}
-		// Create from null terminated UNICODE text.
+			: DataHandle(id, Data(LPBYTE(data), strlen(data) + 1), item,  CF_TEXT, cmd)
+		{ }
+		// Create from null terminated UNICODE value.
 		DataHandle(DWORD id, LPCTSTR data, HSZ item = NULL, UINT cmd = HDATA_APPOWNED)
-		{
-			hData = DdeCreateDataHandle(id, (LPBYTE)data, DWORD((wcslen(data) + 1) * sizeof(WCHAR)),
-				0, item, CF_UNICODETEXT, cmd);
-		}
+			: DataHandle(id, Data(LPBYTE(data), wcslen(data) + 1), item, CF_UNICODETEXT, cmd)
+		{ }
 		DataHandle(const DataHandle&) = delete;
 		DataHandle& operator=(const DataHandle&) = delete;
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddefreedatahandle
 		~DataHandle()
 		{
-			DdeFreeDataHandle(hData);
+			// Called by Excel when returned from callback.
+			// DdeFreeDataHandle(hData);
 		}
 
 		// After a data handle has been used as a parameter in another 
@@ -72,7 +73,7 @@ namespace DDE {
 			return AccessData(hData);
 		}
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddeadddata
-		// 
+		// Will resize if data.size() + off > current size 
 		DataHandle& Add(Data data, DWORD off = 0)
 		{
 			hData = DdeAddData(hData, data.data(), (DWORD)data.size(), off);
@@ -85,10 +86,13 @@ namespace DDE {
 		{
 			return DdeUnaccessData(hData);
 		}
+		BOOL Free()
+		{
+			return DdeFreeDataHandle(hData);
+		}
 	};
 
-	template<typename T>
-	// require T = CHAR or TCHART
+	template<is_win_char T>
 	class StringHandle {
 		DWORD id;
 		HSZ hsz;
@@ -100,7 +104,7 @@ namespace DDE {
 		StringHandle(DWORD id, const std::basic_string<T>& string)
 			: id(id)
 		{
-			hsz = DdeCreateStringHandle(id, string.data(), (UINT)CP_<T>::codepage);
+			hsz = DdeCreateStringHandle(id, string.data(), (UINT)CP_<T>::value);
 		}
 		StringHandle(DWORD id, HSZ hsz)
 			: id(id), hsz(hsz)
@@ -125,6 +129,17 @@ namespace DDE {
 		{
 			DdeFreeStringHandle(id, hsz);
 		}
+	
+		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddekeepstringhandle?devlangs=cpp&f1url=%3FappId%3DDev18IDEF1%26l%3DEN-US%26k%3Dk(WIN_DDE%2FDDE%3A%3AStringHandle%3A%3ADdeKeepStringHandle);k(DDE%3A%3AStringHandle%3A%3ADdeKeepStringHandle);k(DdeKeepStringHandle);k(DevLang-C%2B%2B);k(TargetOS-Windows)%26rd%3Dtrue
+		// Increments the usage count associated with the specified handle. 
+		// This function enables an application to save a string handle passed
+		// to the application's Dynamic Data Exchange (DDE) callback function.
+		// Otherwise, a string handle passed to the callback function is deleted 
+		// when the callback function returns. 
+		BOOL Keep()
+		{
+			return DdeKeepStringHandle(id, hsz);
+		}
 
 		// https://learn.microsoft.com/en-us/windows/win32/api/ddeml/nf-ddeml-ddecmpstringhandles?devlangs=cpp&f1url=%3FappId%3DDev18IDEF1%26l%3DEN-US%26k%3Dk(DDEML%2FDdeCmpStringHandles);k(DdeCmpStringHandles);k(DevLang-C%2B%2B);k(TargetOS-Windows)%26rd%3Dtrue
 		auto operator<=>(HSZ hsz_) const
@@ -141,10 +156,12 @@ namespace DDE {
 		{
 			std::basic_string<T> sz;
 
-			DWORD nb = DdeQueryString(id, hsz, 0, 0, (UINT)CP_<TCHAR>::codepage);
+			// TODO: Keep???
+			DWORD nb = DdeQueryString(id, hsz, 0, 0, (UINT)CP_<TCHAR>::value);
 			if (nb != 0) {
 				sz.resize(nb);
-				nb = DdeQueryString(id, hsz, sz.data(), nb + 1, (UINT)CP_<TCHAR>::codepage);
+				// TODO: Keep???
+				nb = DdeQueryString(id, hsz, sz.data(), nb + 1, (UINT)CP_<TCHAR>::value);
 			}
 
 			return sz;
@@ -159,21 +176,31 @@ namespace DDE {
 	using Hsz = StringHandle<TCHAR>;
 
 	struct TopicHandlers {
+		// handleConnect // TRUE/FALSE
+		// handleConnectConfirm // 0 
+		// handleDisconnect // 0
+		// HDDEDATA/NULL
 		std::function<HDDEDATA(UINT uFmt, HCONV hConv, HSZ item, HSZ topic)> handleRequest;
-		// handlePoke
-		// handleAdvreq
+		// handlePoke // DDE_FACK or DDE_FNOTPROCESSED
+		// handleAdvExecute // DDE_FACK or DDE_FNOTPROCESSED
+		// handleAdvStart // TRUE/FALSE
+		// handleAdvStop // 0
+		// handleAdvData // DDE_FACK or DDE_FNOTPROCESSED
+		// handleAdvReq
 	};
 	
 	class Service;
-	// Global map from service name to Id and Service.
-	inline std::map<Tstring, std::pair<DWORD,Service*>> g_idService;
 	inline Service* g_pService;
 
 	class Service {
 		DWORD id_ = 0;
 		Tstring service_;
+		// Global map from service name to id and Service.
+		static inline std::map<Tstring, std::pair<DWORD, Service*>> g_idService;
+		// Map topic to handlers
 		std::map<Tstring, TopicHandlers> topic_; //
 	public:
+		// Create service id and register service name.
 		Service(const Tstring& service, DWORD cmd = APPCLASS_STANDARD)
 			: service_(service)
 		{
@@ -196,18 +223,16 @@ namespace DDE {
 		~Service() 
 		{
 			if (id_) {
-				if (g_idService.count(service_)) {
-					g_idService.erase(service_);
-				}
 				DdeNameService(id_, Hsz(id_, service_), 0, DNS_UNREGISTER);
 				DdeUninitialize(id_);
+				g_idService.erase(service_);
 			}
 		}
-		DWORD Id() const
+		DWORD id() const
 		{
 			return id_;
 		}
-		Tstring serviceName() const
+		Tstring service() const
 		{
 			return service_;
 		}
@@ -226,7 +251,7 @@ namespace DDE {
 		}
 		
 		// Supply service id for DDEML functions
-		DDE::DataHandle DataHandle(Data data, HSZ item, UINT fmt = CF<TCHAR>::text, UINT cmd = HDATA_APPOWNED)
+		DDE::DataHandle DataHandle(Data data, HSZ item, UINT fmt = CF_<TCHAR>::value, UINT cmd = HDATA_APPOWNED)
 		{
 			return DDE::DataHandle(id_, data, item, fmt, cmd);
 		}
@@ -244,9 +269,10 @@ namespace DDE {
 			// Lookup topic handlers
 			CONVINFO hInfo = { 0 };
 			DdeQueryConvInfo(hConv, QID_SYNC, &hInfo);
-			std::string s;
-			Tstring ts;
-			s = XTYP_(uType);
+			//std::string s;
+			//Tstring ts;
+			const char* s = XTYP_(uType);
+			/*
 			ts = Hsz(id_, hInfo.hszSvcPartner).QueryString();
 			ts = Hsz(id_, hInfo.hszServiceReq).QueryString();
 			ts = Hsz(id_, hInfo.hszTopic).QueryString();
@@ -254,11 +280,16 @@ namespace DDE {
 			s = XTYP_(hInfo.wType);
 			ts = *Hsz(id_, topic);
 			ts = *Hsz(id_, service);
-
+			*/
+			// May throw std::bad_function_call.
 			switch (uType) {
 			case XTYP_CONNECT: {
-				auto cnd = g_idService[*Hsz(id_, service)];
-				return (HDDEDATA)(service_ == *Hsz(id_, service) && g_idService.count(*Hsz(id_, topic)));
+				BOOL b;
+				b = DdeKeepStringHandle(id_, service);
+				auto svc = *Hsz(id_, service);
+				svc = *Hsz(id_, service);
+				//auto cnd = Service::g_idService[*Hsz(id_, service)];
+				return (HDDEDATA)(service_ == svc && Service::g_idService.count(*Hsz(id_, topic)));
 			}
 			case XTYP_REQUEST:
 				return ptopic->handleRequest(uFmt, hConv, hInfo.hszItem, topic);
@@ -280,10 +311,6 @@ namespace DDE {
 		static HDDEDATA CALLBACK DdeCallback(UINT uType, UINT uFmt, HCONV hConv,
 			HSZ topic, HSZ service, HDDEDATA hData, ULONG_PTR dw1, ULONG_PTR dw2)
 		{
-
-			Hsz svc(g_pService->Id(), service);
-			//int cmp = DdeCmpStringHandles(service, svc);
-			auto psvc = svc.QueryString();
 			return g_pService->Callback(uType, uFmt, hConv, topic, service, hData);
 		}
 	public:

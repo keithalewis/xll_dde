@@ -1,6 +1,6 @@
 #include <cassert>
 #include <iostream>
-#include "xll_dde.h"
+#include "win_dde.h"
 
 using namespace DDE;
 
@@ -34,7 +34,7 @@ int main()
         DDE::Service service(TEXT("MyService"));
         TopicHandlers th;
         th.handleRequest = [&service](UINT uFmt, HCONV hConv, HSZ item, HSZ topic) {
-            return DataHandle(service.Id(), TEXT("Hi"), item, CF<TCHAR>::text);
+            return DataHandle(service.id(), TEXT("Hi"), item, CF_<TCHAR>::value);
             };
         service.setTopic(TEXT("MyTopic"), th);
 

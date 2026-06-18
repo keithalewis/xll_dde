@@ -32,6 +32,7 @@
     <ProjectGuid>{9f8e0ffc-15b4-47c3-a887-68a013ee2984}</ProjectGuid>
     <RootNamespace>xlldde</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>win_dde</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -202,10 +203,10 @@
   <ItemGroup>
     <ClInclude Include="dde_defines.h" />
     <ClInclude Include="error.h" />
-    <ClInclude Include="xll_dde.h" />
+    <ClInclude Include="win_dde.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="xll_dde.cpp" />
+    <ClCompile Include="win_dde.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />
