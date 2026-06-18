@@ -108,7 +108,9 @@ namespace DDE {
 		}
 		StringHandle(DWORD id, HSZ hsz)
 			: id(id), hsz(hsz)
-		{ }
+		{
+			Keep(); // presumably from DDE callback, so keep it alive until destructor.
+		}
 		// TODO: reference counting??? DdeKeepStringHandle
 		StringHandle(const StringHandle&) = delete;
 		StringHandle(StringHandle&& sh) noexcept
@@ -183,10 +185,12 @@ namespace DDE {
 		std::function<HDDEDATA(UINT uFmt, HCONV hConv, HSZ item, HSZ topic)> handleRequest;
 		// handlePoke // DDE_FACK or DDE_FNOTPROCESSED
 		// handleAdvExecute // DDE_FACK or DDE_FNOTPROCESSED
-		// handleAdvStart // TRUE/FALSE
+		// Return TRUE to accept advise loop, FALSE to reject
+		std::function<BOOL(UINT uFmt, HCONV hConv, HSZ item, HSZ topic)> handleAdvStart;
 		// handleAdvStop // 0
 		// handleAdvData // DDE_FACK or DDE_FNOTPROCESSED
-		// handleAdvReq
+		// Return data for active advise loop
+		std::function<HDDEDATA(UINT uFmt, HCONV hConv, HSZ item, HSZ topic)> handleAdvReq;
 	};
 	
 	class Service;
@@ -261,6 +265,19 @@ namespace DDE {
 			return DDE::StringHandle(id_, string);
 		}
 
+		// Post advise notification to all clients monitoring this topic/item
+		// This triggers clients to send XTYP_ADVREQ to get updated data
+		bool PostAdvise(const Tstring& topic, const Tstring& item = TEXT(""))
+		{
+			HSZ hszTopic = Hsz(id_, topic);
+			HSZ hszItem = item.empty() ? NULL : Hsz(id_, item);
+
+			// Notify all clients with active advise loops
+			BOOL result = DdePostAdvise(id_, hszTopic, hszItem);
+
+			return result != 0;
+		}
+
 		// ---- Instance callback ----
 		HDDEDATA Callback(UINT uType, UINT uFmt, HCONV hConv,
 			HSZ topic, HSZ service, HDDEDATA hData)
@@ -284,12 +301,7 @@ namespace DDE {
 			// May throw std::bad_function_call.
 			switch (uType) {
 			case XTYP_CONNECT: {
-				BOOL b;
-				b = DdeKeepStringHandle(id_, service);
-				auto svc = *Hsz(id_, service);
-				svc = *Hsz(id_, service);
-				//auto cnd = Service::g_idService[*Hsz(id_, service)];
-				return (HDDEDATA)(service_ == svc && Service::g_idService.count(*Hsz(id_, topic)));
+				return (HDDEDATA)(ptopic && this->service() == *Hsz(id_, service));
 			}
 			case XTYP_REQUEST:
 				return ptopic->handleRequest(uFmt, hConv, hInfo.hszItem, topic);
@@ -297,8 +309,19 @@ namespace DDE {
 			case XTYP_POKE:
 				return 0;// handlePoke(topic, service, uFmt, hData);
 
+			case XTYP_ADVSTART:
+				// Client requests to start an advise loop (hot link)
+				if (ptopic && ptopic->handleAdvStart) {
+					return (HDDEDATA)(DWORD_PTR)ptopic->handleAdvStart(uFmt, hConv, hInfo.hszItem, topic);
+				}
+				return (HDDEDATA)FALSE; // Reject advise loop by default
+
 			case XTYP_ADVREQ:
-				return 0;// handleAdvise(topic, service, uFmt);
+				// Server should provide data for active advise loop
+				if (ptopic && ptopic->handleAdvReq) {
+					return ptopic->handleAdvReq(uFmt, hConv, hInfo.hszItem, topic);
+				}
+				return nullptr;
 
 			case XTYP_DISCONNECT:
 				return nullptr;

@@ -209,6 +209,7 @@
     <ClCompile Include="win_dde.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="CLIENT_EXAMPLE.md" />
     <None Include="README.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

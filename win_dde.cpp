@@ -1,5 +1,8 @@
 #include <cassert>
 #include <iostream>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 #include "win_dde.h"
 
 using namespace DDE;
@@ -32,13 +35,82 @@ int main()
     try {
         //test_dde();
         DDE::Service service(TEXT("MyService"));
-        TopicHandlers th;
-        th.handleRequest = [&service](UINT uFmt, HCONV hConv, HSZ item, HSZ topic) {
-            return DataHandle(service.id(), TEXT("Hi"), item, CF_<TCHAR>::value);
-            };
-        service.setTopic(TEXT("MyTopic"), th);
 
+        // Shared data that will be updated
+        static int counter = 0;
+        static Tstring currentData = TEXT("Initial value");
+
+        TopicHandlers th;
+
+        // Handle one-time data requests
+        th.handleRequest = [&service](UINT uFmt, HCONV hConv, HSZ item, HSZ topic) {
+            Tstring itemName = *Hsz(service.id(), item);
+            std::wcout << L"Request for item: " << itemName << std::endl;
+            return DataHandle(service.id(), currentData.c_str(), item);
+        };
+        /*
+        // Handle advise loop start requests
+        th.handleAdvStart = [&service](UINT uFmt, HCONV hConv, HSZ item, HSZ topic) -> BOOL {
+            Tstring itemName = *Hsz(service.id(), item);
+            std::wcout << L"AdvStart requested for item: " << itemName 
+                      << L" (Format: " << uFmt << L")" << std::endl;
+
+            // You can be selective about which items/formats to accept
+            // For example, only accept CF_TEXT or CF_UNICODETEXT
+            if (uFmt == CF_TEXT || uFmt == CF_UNICODETEXT) {
+                return TRUE; // Accept the advise loop
+            }
+            return FALSE; // Reject other formats
+        };
+
+        // Handle advise loop data requests (triggered by DdePostAdvise)
+        th.handleAdvReq = [&service](UINT uFmt, HCONV hConv, HSZ item, HSZ topic) {
+            Tstring itemName = *Hsz(service.id(), item);
+            std::wcout << L"AdvReq for item: " << itemName 
+                      << L" - Sending: " << currentData << std::endl;
+
+            // Return current data for the advise loop
+            return DataHandle(service.id(), currentData.c_str(), item, uFmt);
+        };
+        */
+        service.setTopic(TEXT("MyTopic"), th);
+        /*
+        std::wcout << L"DDE Server started: MyService|MyTopic" << std::endl;
+        std::wcout << L"Updates will be posted every 3 seconds..." << std::endl;
+        std::wcout << L"Try connecting with Excel: =MyService|MyTopic!MyItem" << std::endl;
+
+        // Set up a timer to periodically update data and notify clients
+        const UINT_PTR TIMER_ID = 1;
+        SetTimer(NULL, TIMER_ID, 3000, [](HWND hwnd, UINT msg, UINT_PTR id, DWORD time) {
+            counter++;
+
+            // Update the data
+            auto now = std::chrono::system_clock::now();
+            auto time_t = std::chrono::system_clock::to_time_t(now);
+            std::tm tm;
+            localtime_s(&tm, &time_t);
+
+            std::wostringstream oss;
+            oss << L"Update #" << counter << L" at " 
+                << std::put_time(&tm, L"%H:%M:%S");
+            currentData = oss.str();
+
+            std::wcout << L"\n[Timer] Data updated: " << currentData << std::endl;
+
+            // Notify all clients with active advise loops
+            if (g_pService) {
+                bool posted = g_pService->PostAdvise(TEXT("MyTopic"), TEXT("MyItem"));
+                if (posted) {
+                    std::wcout << L"[Timer] Posted advise notification" << std::endl;
+                } else {
+                    std::wcout << L"[Timer] No active advise loops" << std::endl;
+                }
+            }
+        });
+        */
         service.runMessageLoop();
+
+        //KillTimer(NULL, TIMER_ID);
     }
     catch (const std::exception& ex) {
         std::cerr << ex.what() << std::endl;
